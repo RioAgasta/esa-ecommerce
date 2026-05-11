@@ -1,0 +1,140 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: saga_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    networks:
+      - saga_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: saga_api_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      ORCHESTRATOR_URL: http://orchestrator-service:3001
+    depends_on:
+      - orchestrator-service
+    networks:
+      - saga_network
+
+  orchestrator-service:
+    build:
+      context: .
+      dockerfile: orchestrator-service/Dockerfile
+    container_name: saga_orchestrator
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: orchestrator_db
+      ORDER_SERVICE_URL: http://order-service:3002
+      INVENTORY_SERVICE_URL: http://inventory-service:3003
+      PAYMENT_SERVICE_URL: http://payment-service:3004
+      SHIPPING_SERVICE_URL: http://shipping-service:3005
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saga_network
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: saga_order_service
+    ports:
+      - "3002:3002"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      ORDER_DB_NAME: order_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saga_network
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    container_name: saga_inventory_service
+    ports:
+      - "3003:3003"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      INVENTORY_DB_NAME: inventory_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saga_network
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    container_name: saga_payment_service
+    ports:
+      - "3004:3004"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PAYMENT_DB_NAME: payment_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saga_network
+
+  shipping-service:
+    build:
+      context: .
+      dockerfile: shipping-service/Dockerfile
+    container_name: saga_shipping_service
+    ports:
+      - "3005:3005"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      SHIPPING_DB_NAME: shipping_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saga_network
+
+volumes:
+  postgres_data:
+
+networks:
+  saga_network:
+    driver: bridge
